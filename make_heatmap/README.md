@@ -93,7 +93,7 @@ This file may contain negative values, gaps between the end of a bin and the sta
 ```
 [ID]        [Value]        [Chromosome]        [Physical Start]        [Physical End]        [Strand]
 ```
-The ID column may contain any relevant information, and is not required to be unique.  The value column must contain a number, to be used in the calculation of bin values, and the strand column may contain only the values “plus”, “minus”, “+”, or “-“.  The physical start and end, corresponding to the boundaries of the aligned read, probe, or other feature, must be integer values, with physical end being greater than or equal to physical start.  The chromosome identifiers used in all hit file types must match those contained in the gene list file exactly.
+The ID column may contain any relevant information, and is not strictly required to be unique unless the same IDs will also be used as Gene IDs which must be unique (see below).  The value column must contain a number, to be used in the calculation of bin values, and the strand column may contain only the values “plus”, “minus”, “+”, or “-“.  The physical start and end, corresponding to the boundaries of the aligned read, probe, or other feature, must be integer values, with physical end being greater than or equal to physical start.  The chromosome identifiers used in all hit file types must match those contained in the gene list file exactly.
 
 **Gene List File:**  The gene list file consists of five required, and one optional, tab-separated columns, with each line corresponding to one gene or other feature of interest:
 ```
