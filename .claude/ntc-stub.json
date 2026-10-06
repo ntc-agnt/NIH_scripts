@@ -1,0 +1,7 @@
+{
+  "source": "ntc-ecosystem-context",
+  "skill": "nih-scripts",
+  "meta_sha": "7f84002",
+  "generated": "2026-10-06",
+  "managed_paths": [".claude/skills/nih-scripts", ".claude/ntc-ecosystem.md", ".claude/reference/runAsPipeline-grammar.md", ".claude/ntc-stub.json", "CLAUDE.md (marked block)"]
+}
