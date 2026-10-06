@@ -130,8 +130,9 @@ NIH_scripts) is the shared matrix engine behind most analysis tools.
 - **O2 + group paths** everywhere (`hpc_ntc` vs `hpc_adelman`); little runs off-cluster.
 - **rAP vs hand-rolled DAG**: only RNAseqMapping/pipeline2/DOBBE_F are smartSlurm; GGA/
   MHT/peakMorph submit plain dependent `sbatch` jobs.
-- **runAsPipeline CLI mismatch**: pipeline READMEs use the legacy positional form
-  (`"script" noTmp run`); current smartSlurm master uses named flags (`--script --tmp`).
-  Verify the deployed version — see `reference/runAsPipeline-grammar.md`.
+- **runAsPipeline CLI**: authoritative smartSlurm is `ld32/SmartSlurm` branch **`ux-update`**
+  (NTC decision 2026-10), which uses **named flags** (`--script --tmp --mode --lint`) and a
+  new `#@end` explicit block-closure mode. The legacy positional form (`"script" noTmp run`)
+  in the pipeline READMEs is stale and not accepted — see `reference/runAsPipeline-grammar.md`.
 - **TSScall ≠ proTSScall** (different mechanisms; proTSScall is not a fork).
 - **make_heatmap** binary (NIH_scripts) is a hard dependency for most analysis tools.

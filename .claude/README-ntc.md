@@ -12,4 +12,4 @@ repo's deep-analysis agent *and* is aware of the wider NTC ecosystem:
 
 Edit the originals in the meta-repo and regenerate (`make-repo-stub.sh` /
 `refresh-ntc-context`); changes here will be overwritten. Generated from
-ntc-ecosystem-context @ 7f84002 on 2026-10-06.
+ntc-ecosystem-context @ 5dc5900 on 2026-10-06.

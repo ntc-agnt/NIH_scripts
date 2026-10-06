@@ -43,7 +43,16 @@ Rules verified in `runAsPipeline`:
 - **Job arrays are NOT supported** — `--array=`/`-a` in a step's sbatch options ⇒ error.
 - `ssbatch` must NOT appear in a command line inside the script ⇒ error (rAP adds it).
 
-### Where a block ends — blank line is the ONLY terminator
+### Where a block ends — two modes (authoritative smartSlurm = ux-update)
+**Dual block-closure mode (ux-update, `426709f`).** `runAsPipeline` picks the mode per
+script: if the script contains **any** `#@end` line, the WHOLE script is parsed in
+**explicit-closure mode** — blank lines are treated as *body*, only `#@end` closes a block,
+and an unclosed `#@` at end-of-script is an error. If there is no `#@end` anywhere, the
+**legacy blank-line mode** below applies. `--lint` warns where a block relies on legacy
+blank-line closure. Prefer `#@ … #@end` for new/edited pipelines; it removes the blank-line
+foot-guns (heredocs, `done`, trailing commands).
+
+**Legacy blank-line mode (no `#@end` in the script):**
 - A `#@` block greedily collects **every following line** (joined with `;`) until a
   **blank/whitespace-only line**. Always leave a blank line before `done`, the next
   `#@`, or any following plain command, or they get swallowed into the job command.
@@ -128,8 +137,8 @@ becomes part of each job's flag** (`1.0.findNumber.1`, `1.0.findNumber.2`, …).
 ```
 runAsPipeline --script "SCRIPT [ARGS]" --tmp {useTmp|noTmp} \
    [--sbatch-options "sbatch -p short -c 1 --mem 2G -t 50:0"] \
-   [--mode dryrun] [--email noEmail|noSuccEmail] \
-   [--special checkpoint|excludeFailedNodes] [-A|--account=ACCT]
+   [--mode dryrun] [--lint] [--email noEmail|noSuccEmail] \
+   [--special checkpoint|excludeFailedNodes] [-v|--verbose | -q|--quiet] [-A|--account=ACCT]
 ```
 
 | Option | Meaning | Default |
@@ -138,21 +147,21 @@ runAsPipeline --script "SCRIPT [ARGS]" --tmp {useTmp|noTmp} \
 | `--tmp useTmp\|noTmp` | copy each step's `reference` to node-local `/tmp` or not | required |
 | `--sbatch-options "…"` | default sbatch for steps with no own options; must start `sbatch` | `sbatch -p short -c 1 --mem 2G -t 50:0` |
 | `--mode dryrun` | build + log plan, submit nothing | submit |
+| `--lint` | parse + warn (e.g. legacy blank-line closure) without submitting | off |
 | `--email noEmail\|noSuccEmail` | silence all / success emails | all |
 | `--special checkpoint\|excludeFailedNodes` | checkpoint long jobs / avoid previously-failing nodes | none |
+| `-v\|--verbose`, `-q\|--quiet` | output verbosity | normal |
 
-> [!WARNING]
-> **Invocation-form discrepancy (verify against the DEPLOYED smartSlurm).** The
-> cloned `ntc-agnt/smartSlurm` (master) `runAsPipeline` parses **named flags only**
-> (`--script`, `--tmp`, …) and aborts on any unknown token. But every NTC pipeline
-> README (RNAseqMapping, pipeline2, DOBBE_F) invokes the **legacy positional form**
-> `runAsPipeline "SCRIPT ARGS" useTmp|noTmp run`. That positional form fails against
-> this master. So the smartSlurm actually deployed at
-> `/n/data1/cores/ntc/scripts/SmartSlurm` is a different version/branch, or the
-> pipeline READMEs are stale. There are ≥3 smartSlurm variants in play: `ld32/SmartSlurm`
-> (upstream; branch `ux-update` is the active dev line the test harness targets),
-> `ntc-agnt/smartSlurm` (this clone, master), and `ntc-agnt/SmartSlurm`. **Confirm the
-> deployed version and its accepted CLI before relying on either form.** TODO.
+> [!IMPORTANT]
+> **Authoritative smartSlurm = `ld32/SmartSlurm` branch `ux-update`** (per NTC decision,
+> 2026-10; verified at commit `426709f`), even though it is not yet merged to upstream
+> `master`. Its `runAsPipeline` parses **named flags only** (`--script`, `--tmp`, `--mode`,
+> `--lint`, `-v/-q`, …) and aborts on any unknown token — the same named-flag form as the
+> `ntc-agnt/smartSlurm` master clone. The **legacy positional form**
+> `runAsPipeline "SCRIPT ARGS" useTmp|noTmp run` used in the pipeline READMEs
+> (RNAseqMapping, pipeline2, DOBBE_F) is **not accepted** by either and should be treated
+> as stale — the READMEs need updating (backlog NTC-008). The deployed
+> `/n/data1/cores/ntc/scripts/SmartSlurm` should track `ux-update`.
 
 Outputs land in `smartSlurmLog/` (relative to cwd): per-step `.sh` job scripts, `.out`
 logs, `.success`/`.failed` flag files, `allJobs.txt`, and `.smartSlurm.log`.

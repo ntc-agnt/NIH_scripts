@@ -16,6 +16,6 @@ dev / deep-analysis agent.
 
 @.claude/ntc-ecosystem.md
 
-<sub>Generated from ntc-ecosystem-context @ 7f84002 on 2026-10-06 by make-repo-stub.sh. Do not
+<sub>Generated from ntc-ecosystem-context @ 5dc5900 on 2026-10-06 by make-repo-stub.sh. Do not
 hand-edit this block or `.claude/ntc-*`; regenerate from the meta-repo.</sub>
 <!-- END NTC ECOSYSTEM CONTEXT (generated) -->
