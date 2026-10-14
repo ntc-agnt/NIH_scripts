@@ -1,0 +1,123 @@
+#!/usr/bin/perl
+#
+# bedgraphs2stdBedGraph_streaming
+# -------------------------------
+# Memory-lean, streaming reimplementation of bedgraphs2stdBedGraph (in the same
+# directory). It merges/sums all bedGraphs in the working directory over
+# identical intervals into one standard bedGraph, producing BYTE-IDENTICAL
+# output to the original on well-formed input -- but holding only one record per
+# input file in memory instead of the entire merged union, and running a little
+# faster. See README_streaming.md for the full rationale, guarantees, caveats,
+# and the byte-diff test harness under tests/.
+#
+# How it works: the inputs are already sorted by (chr in `cmp` order, start
+# ascending) -- the order bowtie2stdBedGraph emits and normalize_bedGraph
+# preserves -- so instead of loading everything into a hash and sorting at the
+# end, it does a k-way merge across the files. Each file keeps one "front"
+# record in parallel arrays; the hot loop linear-scans the fronts for the
+# minimum (chr cmp, end), sums all fronts on that interval in file-index order,
+# emits it, and refills only the files it consumed. O(output * files) time,
+# O(files) memory. The linear scan beats a pure-Perl binary heap for the file
+# counts this tool sees (tens to low hundreds) because it avoids a per-record
+# subroutine-call storm; for very large file counts a heap (ideally in C) would
+# scale better.
+#
+# Byte-identity vs the original is preserved by matching it exactly on the valid
+# path: same file discovery/order (<*.bedgraph> then <*.bedGraph>, glob-sorted),
+# same 1-based(.bedgraph, -1) / 0-based(.bedGraph, 0) start handling, the same
+# (chr,end) grouping with start/end strings taken from the first (lowest-index)
+# file to carry an interval, value = 0 + sum of column 4 in file order, and the
+# same (chr cmp, end <=>) output order and header/record formatting.
+#
+# Differences from the original, both deliberate (see README_streaming.md):
+#   * It REQUIRES each input sorted by (chr cmp, start) and dies with a clear
+#     message otherwise, rather than silently mis-merging (the hash-based
+#     original tolerates arbitrary input order). Pipeline-produced inputs
+#     already satisfy this.
+#   * Output is written atomically (temp file + rename on success), so a
+#     mid-run error never leaves a partial or clobbered .bedGraph.
+use strict; use warnings;
+
+my $outname = $ARGV[0];
+defined $outname or die "Error: output file name prefix must be specified\nUsage: bedgraphs2stdBedGraph [output prefix]\n";
+
+open(my $LOG, '>', "${outname}.log") or die "cannot open ${outname}.log: $!\n";
+my $time = localtime();
+
+my @bgs = <*.bedgraph>;
+my @bGs = <*.bedGraph>;
+my @files = (@bgs, @bGs);
+my @off   = ((1) x scalar(@bgs), (0) x scalar(@bGs));
+my $K = scalar(@files);
+
+print $LOG "Initiated $time\n\nMerged $K bedgraphs:\n\n";
+print $LOG "$_\n" for @files;
+
+# parallel per-file front state
+my (@FH,@alive,@c_chr,@c_start,@c_endn,@c_ends,@c_val,@l_chr,@l_endn);
+
+# inline reader: advance file $i to its next data record; set alive=0 at EOF.
+# (kept as a sub only for init; the main loop inlines its own copy for speed)
+for(my $i=0;$i<$K;$i++){
+  open(my $h,'<',$files[$i]) or die "Error: could not open \"$files[$i]\"\n";
+  $FH[$i]=$h; $alive[$i]=0;
+  while(defined(my $line=<$h>)){
+    next if $line =~ /track|^$/;
+    my @F=split(/\s+/,$line);
+    $c_chr[$i]=$F[0]; $c_start[$i]=$F[1]-$off[$i]; $c_endn[$i]=$F[2]+0; $c_ends[$i]=$F[2]; $c_val[$i]=$F[3];
+    $l_chr[$i]=$F[0]; $l_endn[$i]=$c_endn[$i]; $alive[$i]=1; last;
+  }
+}
+
+# Atomic output: stream into a temp file in the SAME directory (same filesystem
+# => rename is atomic) and only rename it onto the final name after a clean
+# finish. A mid-stream die therefore never leaves a partial ${outname}.bedGraph
+# and never clobbers a good file from a previous run -- matching the original,
+# which only creates the output after all input has been read successfully.
+my $final = "${outname}.bedGraph";
+my $tmp   = "${outname}.bedGraph.tmp.$$";   # .tmp.<pid> => not matched by the *.bedGraph glob
+my $committed = 0;
+END { unlink $tmp if defined($tmp) && !$committed && -e $tmp; }   # drop the partial on die/exit
+open(my $OUT,'>',$tmp) or die "cannot open $tmp: $!\n";
+print $OUT "track type=bedGraph name=\"$outname Merged $K bedgraphs\" description=\"$outname\" visibility=full color=179,27,27 altColor=179,27,27\n\n";
+
+my $live = grep {$_} @alive;
+while($live){
+  # find minimum (chr cmp, endn) among alive fronts
+  my $m=-1;
+  for(my $i=0;$i<$K;$i++){
+    next unless $alive[$i];
+    if($m<0 || $c_chr[$i] lt $c_chr[$m] || ($c_chr[$i] eq $c_chr[$m] && $c_endn[$i] < $c_endn[$m])){ $m=$i; }
+  }
+  my $mchr=$c_chr[$m]; my $mendn=$c_endn[$m]; my $mstart=$c_start[$m]; my $mends=$c_ends[$m];
+  my $sum=0;
+  # sum every alive front on this interval, ascending file index = file order
+  for(my $i=0;$i<$K;$i++){
+    next unless $alive[$i] && $c_chr[$i] eq $mchr && $c_endn[$i]==$mendn;
+    if($c_start[$i]!=$mstart){
+      print $LOG "\nError: \"$files[$i]\" contains interval that does not align with previous files\n";
+      die "Error: \"$files[$i]\" contains interval that does not align with previous files:\n$mchr\t$c_start[$i]\t$mends\t$c_val[$i]\n";
+    }
+    $sum += $c_val[$i];
+    # refill file $i inline
+    my $h=$FH[$i]; $alive[$i]=0;
+    while(defined(my $line=<$h>)){
+      next if $line =~ /track|^$/;
+      my @F=split(/\s+/,$line);
+      my $chr=$F[0]; my $endn=$F[2]+0;
+      if($chr lt $l_chr[$i] || ($chr eq $l_chr[$i] && $endn < $l_endn[$i])){
+        print $LOG "\nError: \"$files[$i]\" is not sorted by (chr, position); streaming merge requires sorted input\n";
+        die "Error: \"$files[$i]\" is not sorted by (chr, position) at:\n$line";
+      }
+      $c_chr[$i]=$chr; $c_start[$i]=$F[1]-$off[$i]; $c_endn[$i]=$endn; $c_ends[$i]=$F[2]; $c_val[$i]=$F[3];
+      $l_chr[$i]=$chr; $l_endn[$i]=$endn; $alive[$i]=1; last;
+    }
+    $live-- unless $alive[$i];
+  }
+  print $OUT "$mchr\t$mstart\t$mends\t$sum\n";
+}
+
+close($OUT) or die "Error: could not finish writing $tmp: $!\n";
+rename($tmp, $final) or die "Error: could not move $tmp -> $final: $!\n";
+$committed = 1;    # temp is now the final file; END has nothing to clean up
+close($LOG);
