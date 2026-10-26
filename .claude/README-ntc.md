@@ -9,7 +9,11 @@ repo's deep-analysis agent *and* is aware of the wider NTC ecosystem:
 - `.claude/ntc-ecosystem.md` — the always-loaded ecosystem catalog (the other NTC tools,
   the data-flow DAG, the shared file formats). Imported by the repo's `CLAUDE.md`.
 - `.claude/reference/runAsPipeline-grammar.md` — the smartSlurm grammar cheat sheet.
+- `.claude/ntc-todo.md` — this repo's slice of the ecosystem BACKLOG (a generated projection;
+  advisory — surface to the user, act only on confirmation).
+- `.claude/ntc-changelog.md` — **repo-owned** (NOT overwritten): append a line here when you
+  make a notable revision, so the ecosystem manager can track it.
 
 Edit the originals in the meta-repo and regenerate (`make-repo-stub.sh` /
 `refresh-ntc-context`); changes here will be overwritten. Generated from
-ntc-ecosystem-context @ 5dc5900 on 2026-10-06.
+ntc-ecosystem-context @ 435cddc on 2026-10-26.
