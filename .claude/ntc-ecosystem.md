@@ -4,7 +4,7 @@
 # NTC pipeline ecosystem catalog
 
 The Nascent Transcription Core (NTC / Adelman lab, HMS) toolset for **PRO-seq,
-TT-seq, RNA-seq and Start-seq**: read mapping, TSS/gene annotation, browser tracks,
+TT-seq, RNA-seq, Start-seq and ChIP-seq**: read mapping, TSS/gene annotation, browser tracks,
 and nascent-transcription analyses (pausing, enhancer RNAs, metagenes, expression
 matching). Most tools are **HMS-O2-specific**: hardcoded `/n/data1/...` paths and
 **group-based selection** (`id -Gn` → `hpc_ntc` under `/n/data1/cores/ntc`, else
@@ -44,6 +44,12 @@ NIH_scripts) is the shared matrix engine behind most analysis tools.
   1-nt & bin10 **3'/5' stranded bedGraphs**, make_heatmap matrices, DESeq2, QC. The
   PRO-seq hub feeding proTSScall, DOBBE_F, prepareBrowser, pauseIndex, MHT, peakMorph.
   Emits **bedGraphs, not bigWigs**. Use when: mapping PRO-seq/Start-seq.
+- **ChIPseq** (`ChIP-seq mapping`, `chip-seq-rhel`) — ChIP-seq / CUT&RUN read mapping + QC
+  (standalone scripts, **not rAP**; plain-`sbatch` fan-out). In: FASTQ/SRA + positional
+  manifest, bowtie1 indexes. Out: SAM/BAM, unstranded bedGraph/bigWig tracks, HOMER QC peaks,
+  TSS/TES + whole-transcript metaplots (make_heatmap), mapping-stats TSV. Uses GGA/proTSScall
+  `formakeheatmap` anchors; overlaps MHT (which also supports ChIP-seq). **NEW, "under
+  development"**; env not yet in ntc_env. Use when: mapping/QC-ing ChIP-seq.
 
 ## Annotation (define TSS/TES/dominant transcripts)
 - **TSScall** (`obsTSS`, `uTSS`) — call annotated + novel TSSs from 1-nt 5' bedGraphs.

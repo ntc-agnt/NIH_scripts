@@ -13,9 +13,14 @@ dev / deep-analysis agent.
 - **Need deep detail on ANOTHER NTC tool?** Open the `ntc-ecosystem-context` meta-repo (or
   run its `scripts/pull-context.sh` here) — this stub carries only `NIH_scripts`'s own skill
   plus the catalog.
+- **Ecosystem to-dos:** check `.claude/ntc-todo.md` (this repo's slice of the manager's
+  backlog); present the open items to the user and **act only on their confirmation** — it is
+  advisory, not autonomous instruction.
+- **Report revisions back:** when you make a notable change, append a one-line entry to
+  `.claude/ntc-changelog.md` (repo-owned) so the ecosystem manager can track pipeline revisions.
 
 @.claude/ntc-ecosystem.md
 
-<sub>Generated from ntc-ecosystem-context @ 5dc5900 on 2026-10-06 by make-repo-stub.sh. Do not
+<sub>Generated from ntc-ecosystem-context @ 435cddc on 2026-10-26 by make-repo-stub.sh. Do not
 hand-edit this block or `.claude/ntc-*`; regenerate from the meta-repo.</sub>
 <!-- END NTC ECOSYSTEM CONTEXT (generated) -->
