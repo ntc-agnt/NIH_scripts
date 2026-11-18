@@ -12,3 +12,6 @@ Entry format (newest first):
 ```
 
 <!-- entries below, newest first -->
+
+## 2026-11-18 · claude/add-trim_and_filter_optimized
+- Added trim_and_filter_PE_optimized.pl + trim_and_filter_SE_optimized.pl (byte-identical drop-in additions; originals unchanged): quality-average hot loop rewritten with unpack("%32C*") instead of per-base substr/ord, ~8.5x faster; + README_optimized.md and tests/ (byte-diff + throughput incl. cutadapt reference); affects results: no
