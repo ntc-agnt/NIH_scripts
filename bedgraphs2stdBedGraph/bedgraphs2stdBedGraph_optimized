@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 #
-# bedgraphs2stdBedGraph_streaming
+# bedgraphs2stdBedGraph_optimized
 # -------------------------------
 # Memory-lean, streaming reimplementation of bedgraphs2stdBedGraph (in the same
 # directory). It merges/sums all bedGraphs in the working directory over
 # identical intervals into one standard bedGraph, producing BYTE-IDENTICAL
 # output to the original on well-formed input -- but holding only one record per
 # input file in memory instead of the entire merged union, and running a little
-# faster. See README_streaming.md for the full rationale, guarantees, caveats,
+# faster. See README_optimized.md for the full rationale, guarantees, caveats,
 # and the byte-diff test harness under tests/.
 #
 # How it works: the inputs are already sorted by (chr in `cmp` order, start
@@ -29,7 +29,7 @@
 # file to carry an interval, value = 0 + sum of column 4 in file order, and the
 # same (chr cmp, end <=>) output order and header/record formatting.
 #
-# Differences from the original, both deliberate (see README_streaming.md):
+# Differences from the original, both deliberate (see README_optimized.md):
 #   * It REQUIRES each input sorted by (chr cmp, start) and dies with a clear
 #     message otherwise, rather than silently mis-merging (the hash-based
 #     original tolerates arbitrary input order). Pipeline-produced inputs

@@ -1,4 +1,4 @@
-## bedgraphs2stdBedGraph_streaming
+## bedgraphs2stdBedGraph_optimized
 
 A memory-lean, streaming alternative to `bedgraphs2stdBedGraph` (same directory).
 It is an **addition, not a replacement**: the original script is unchanged, and
@@ -6,7 +6,7 @@ this one is a drop-in with the **same command line and byte-identical output**
 on well-formed input.
 
 ```
-bedgraphs2stdBedGraph_streaming [output prefix]
+bedgraphs2stdBedGraph_optimized [output prefix]
 ```
 
 Like the original, it finds all `*.bedGraph` (standard 0-based) and `*.bedgraph`
@@ -32,7 +32,7 @@ peak memory is `O(number of files)` instead of `O(union of intervals)`.
 | implementation            | peak RSS | wall time |
 |---------------------------|---------:|----------:|
 | `bedgraphs2stdBedGraph` (original, hash) | 638 MB | 21.8 s |
-| `bedgraphs2stdBedGraph_streaming`        | 5.8 MB | 16.1 s |
+| `bedgraphs2stdBedGraph_optimized`        | 5.8 MB | 16.1 s |
 
 ≈ **110× lower peak memory** and modestly faster, with byte-identical output.
 (The speedup comes from avoiding the giant hash build + final sort; the hot loop
@@ -74,7 +74,7 @@ generator (no cluster or real data needed):
 bash tests/run_harness.sh
 ```
 
-It generates synthetic inputs, runs both the original and the streaming script,
+It generates synthetic inputs, runs both the original and the optimized script,
 `cmp`s their `.bedGraph` output byte-for-byte across all scenarios, checks the
 misaligned/ unsorted/ atomic error paths, and prints a peak-RSS + wall-time
 comparison on a large input.

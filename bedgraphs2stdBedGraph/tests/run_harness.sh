@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Byte-diff harness for bedgraphs2stdBedGraph_streaming.
+# Byte-diff harness for bedgraphs2stdBedGraph_optimized.
 #
-# Proves the streaming script produces byte-identical .bedGraph output vs the
+# Proves the optimized script produces byte-identical .bedGraph output vs the
 # original across a matrix of synthetic inputs, checks the misaligned / unsorted
 # / atomic error paths, and reports a peak-RSS + wall-time comparison.
 # Self-contained: needs only perl + coreutils, no cluster or real data.
@@ -9,7 +9,7 @@ set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ORIG="$HERE/../bedgraphs2stdBedGraph"
-PROTO="$HERE/../bedgraphs2stdBedGraph_streaming"
+PROTO="$HERE/../bedgraphs2stdBedGraph_optimized"
 GEN="$HERE/gen_bedgraphs.pl"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 
@@ -108,7 +108,7 @@ if [ "$RO_RC" -eq 0 ] && [ "$RP_RC" -eq 0 ] && cmp -s "$big/orig/merged.bedGraph
 else fail "big input: differ or nonzero (orig_rc=$RO_RC proto_rc=$RP_RC)"; fi
 printf "  %-10s %12s %10s\n" "impl" "maxRSS(MB)" "wall(s)"
 awk -v r="$RO_RSS" -v w="$RO_WALL" 'BEGIN{printf "  %-10s %12.1f %10s\n","original", r/1024, w}'
-awk -v r="$RP_RSS" -v w="$RP_WALL" 'BEGIN{printf "  %-10s %12.1f %10s\n","streaming", r/1024, w}'
+awk -v r="$RP_RSS" -v w="$RP_WALL" 'BEGIN{printf "  %-10s %12.1f %10s\n","optimized", r/1024, w}'
 awk -v o="$RO_RSS" -v p="$RP_RSS" 'BEGIN{ if(p>0) printf "  peak-RSS reduction: %.1fx\n", o/p }'
 
 echo
