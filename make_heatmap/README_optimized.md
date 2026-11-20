@@ -27,8 +27,23 @@ Build notes:
   compile and link steps.
 - **Do not add `-ffast-math`** — it reorders floating-point operations and would
   break bit-for-bit reproducibility (and the byte-identity guarantee). `-O3` and
-  `-O2` are both fine. Avoid `-march=native` for a binary deployed across a
-  heterogeneous cluster.
+  `-O2` are both fine.
+- **Avoid `-march=native` / `-mfma`.** Besides cluster portability (a binary built
+  on a newer node may fault on older ones), enabling FMA is the one thing that can
+  shift coverage-mode (`-v c`) results by a last bit, by fusing `value × length`
+  into the running total. Baseline x86-64 has no FMA instruction, so the default
+  build is contraction-stable; if you ever do tune the arch, add
+  `-ffp-contract=off` and prefer an explicit baseline (e.g. `-march=x86-64-v2`)
+  over `native`.
+
+### Recommended toolchain
+- **GCC ≥ 7** (strong optimizer; GCC 6+ already defaults to a C++ standard new
+  enough that `-std=c++11` is optional, though harmless to pass). Minimum is
+  **GCC 4.8.1** (first complete C++11) with `-std=c++11`. Tested on GCC 13.3.
+- Any of these produce byte-identical output *for the same flags* — IEEE `double`
+  arithmetic is deterministic, and with FMA left off (above) there is no
+  cross-compiler/arch wildcard. Confirm on the target toolchain by rebuilding both
+  binaries and running `tests/run_harness.sh` there.
 
 See the original `README.md` for the full option reference — nothing there
 changes.
