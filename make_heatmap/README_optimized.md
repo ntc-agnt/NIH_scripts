@@ -37,13 +37,29 @@ Build notes:
   over `native`.
 
 ### Recommended toolchain
-- **GCC ≥ 7** (strong optimizer; GCC 6+ already defaults to a C++ standard new
-  enough that `-std=c++11` is optional, though harmless to pass). Minimum is
-  **GCC 4.8.1** (first complete C++11) with `-std=c++11`. Tested on GCC 13.3.
-- Any of these produce byte-identical output *for the same flags* — IEEE `double`
-  arithmetic is deterministic, and with FMA left off (above) there is no
-  cross-compiler/arch wildcard. Confirm on the target toolchain by rebuilding both
-  binaries and running `tests/run_harness.sh` there.
+- **Any GCC from 4.8.1 up is fine** (4.8.1 is the first complete C++11; pass
+  `-std=c++11`). Newer is good, not a problem: a recent GCC — e.g. **`gcc/14` on
+  O2** — gives a stronger optimizer and faster libstdc++ at no correctness cost.
+  Tested here on GCC 13.3. The `-std` level is **semantic only** for this code
+  (C++11/14/17/20 produce byte-identical output at the same speed), so stay at
+  `-std=c++11`.
+- **The caveat is the *runtime* C++ library, not the compiler version.** A binary
+  built with `gcc/14` needs that module's `libstdc++.so` at launch. Under lmod that
+  library lives in the module, so a plain dynamic build works **only if the
+  environment that runs make_heatmap also has the same `gcc/NN` module loaded**;
+  otherwise you get `GLIBCXX_3.4.xx not found`. Because this binary is a hardcoded
+  `/n/data1/...` dependency invoked by many pipelines (which won't all load the
+  same module), build it **self-contained**:
+  ```bash
+  g++ -O3 -std=c++11 -pthread -static-libstdc++ -static-libgcc \
+      -o make_heatmap_optimized make_heatmap_optimized.cpp
+  ```
+  That removes the libstdc++/libgcc runtime dependency entirely (larger binary,
+  no module coupling). Avoid full `-static` (it can break NSS lookups).
+- Output is byte-identical *for the same flags* regardless of GCC version — IEEE
+  `double` arithmetic is deterministic and FMA is left off (above). Confirm on the
+  target toolchain by rebuilding both binaries and running `tests/run_harness.sh`
+  there.
 
 See the original `README.md` for the full option reference — nothing there
 changes.
