@@ -6,7 +6,7 @@ peaks, …), producing a **feature × bin matrix**: one row per feature, one col
 per positional bin, each cell holding the aggregated signal in that bin for that
 feature. That matrix is what metagene profiles and heatmaps are built from.
 
-```
+```bash
             bin -2   bin -1   bin 0(anchor)  bin +1   bin +2
  gene A       3.0      5.5        12.1         4.0      1.0
  gene B       0.0      1.2         8.7         6.3      2.1
@@ -122,17 +122,6 @@ signal interval as spanning its full length and adds `value × (overlapping nt)`
 every bin it crosses, then divides by bin width — i.e. mean per-nt coverage; `-l`
 is ignored in this mode.
 
-### Strand matching (`-s`) and `--nostrand`
-`b` both (**default**): every signal interval is matched to features on either
-strand. `s` same-strand: `+` signal → `+` features only, `−` → `−`. `o` opposite.
-`s`/`o` require strand on **both** the signal (Mode 2, or a stranded format) and the
-features. `--nostrand` is a shortcut for fully strand-agnostic operation
-(`-s b -l p -a p -d p`) and reads features without a strand column.
-
-### Other
-`-t N` worker threads (default 1). `--nohead` omit the descriptive header block.
-`--help` usage.
-
 ---
 
 ## Input formats
@@ -155,11 +144,38 @@ noted.
 - cppmatch strand and extended-BED strand accept `+`, `-`, `plus`, or `minus`.
 - A signal file may be a **comma-separated list** (see *Multiple signal files*).
 
+#### Interval width: single-nt vs fixed-step vs variable-width bedGraphs
+`make_heatmap` makes **no assumption about bedGraph step/width** — it reads each
+line's own `start`/`end`/`value`, so single-nucleotide, fixed-step (uniformly
+binned), and variable-width bedGraphs are all accepted. **How width is used depends
+only on `-v`:**
+
+- **Point modes (`-v t` / `-v a` / `-v d`, the default family):** each interval is
+  first collapsed to **one coordinate** (per `-l`), and its whole `value` is
+  deposited there — the interval's **width is ignored** (except insofar as `-l`
+  chooses start/end/center). Consequences:
+  - *single-nt* bedGraphs (e.g. PRO-seq 3′/5′ end counts): the value lands at that
+    exact nt — full resolution.
+  - *fixed-step* bedGraphs (e.g. 10-nt bins): the entire bin's value is placed at
+    one coordinate of the bin (its start under the default `-l p`), **not** spread
+    over the 10 nt — so positional resolution is the step size; `-l c` centers it.
+  - *variable-width* bedGraphs (e.g. merged coverage / fragment pileups): wide and
+    narrow lines are treated identically — each contributes its `value` at a single
+    point, regardless of how many nucleotides it spans.
+  - So if a bedGraph's `value` is a **per-nt level** held constant across a
+    multi-nt interval, point modes will **undercount** it (they add the level once,
+    not once per nt); point modes are appropriate when each line's `value` is a
+    **per-interval total** (as for 1-nt end counts or fragment-center bins).
+- **Coverage mode (`-v c`):** width **is** honored — each interval adds
+  `value × (nt overlapping the bin)` to every bin it crosses. Single-nt,
+  fixed-step, and variable-width bedGraphs are therefore integrated consistently;
+  use this when `value` is a per-nt level and you need width-aware profiles.
+
 ### Feature list
 Tab-separated, one feature per row — these six columns become the first six output
 columns:
 
-```
+```bash
 ID    Description/anchor    Chromosome    PhysStart    PhysEnd    [Strand]
 ```
 
@@ -175,7 +191,7 @@ ID    Description/anchor    Chromosome    PhysStart    PhysEnd    [Strand]
 Two tab-separated columns, `start<TAB>end`, one bin per row, as **offsets from the
 anchor**:
 
-```
+```bash
 -100   -1
 0      99
 100    299
@@ -194,7 +210,7 @@ the bundled `*_chr_size.txt` files follow it.)
 A header block (suppressed by `--nohead`) echoing the chosen options and input
 filenames, then a column header row, then one row per feature:
 
-```
+```bash
 Gene ID   Description   Chromosome   Gene Start   Gene End   Strand   <bin 1> <bin 2> ...
 ```
 
@@ -223,12 +239,12 @@ files. Two behaviors:
 ### Single signal file (Mode 1)
 
 ChIP-seq coverage (one bedGraph) over whole gene bodies scaled to 50 bins:
-```
+```bash
 make_heatmap -h G -b v -s b -a s -d g sample.bedGraph genes.txt out.matrix 50
 ```
 
 Count mapped BED intervals in custom bins around peak centers, strand-agnostic:
-```
+```bash
 make_heatmap -h b -b f --nostrand reads.bed peaks.txt out.matrix bins.txt
 ```
 
@@ -251,12 +267,12 @@ make_heatmap -p fwd.bedGraph -m rev.bedGraph -b c -s s -a s -l s -d g -- \
 ```
 
 `-b v` — each gene body scaled to 100 bins (anchor ignored; 5′→3′ via `-d g`):
-```
+```bash
 make_heatmap -p fwd.bedGraph -m rev.bedGraph -b v -s s -l s -d g genes.txt out.matrix 100
 ```
 
 `-b f` — custom bins from a file (offsets relative to the anchor):
-```
+```bash
 make_heatmap -p fwd.bedGraph -m rev.bedGraph -b f -s s -a s -l s -d g genes.txt out.matrix bins.txt
 ```
 
@@ -275,7 +291,7 @@ genetic). For an unstranded feature list, add `--nostrand` or use `-a p -d p`.
 
 ## Build
 
-```
+```bash
 g++ -O3 -o make_heatmap make_heatmap.cpp -lpthread          # Linux
 g++ -O3 -o make_heatmap make_heatmap_OSX.cpp -stdlib=libstdc++   # macOS
 g++ -O3 -DSINGLE -o make_heatmap make_heatmap.cpp           # no pthreads (single-threaded)
