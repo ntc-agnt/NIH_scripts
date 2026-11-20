@@ -31,22 +31,17 @@ This tool predates some now-standard names. The equivalents:
 | **bin** / column | bin | one output column: a window at a fixed offset from the anchor |
 | **value** | bin value | the number put in a cell (sum / average / density / coverage of the signal in that bin) |
 
-A signal track is **not** an annotation; the feature list is the annotation.
-Both can be strand-aware, and keeping them distinct matters for the strand options
-below.
-
 ---
 
-## The two run modes
+## Run modes
 
 How you invoke `make_heatmap` depends first on **how the signal is supplied**.
 There are two modes; the first has three sub-forms (by how the bins are defined).
 
 ### Mode 1 — a single signal file
 
-The signal is one file, given as the first positional argument. Pick **one** of
-three ways to define the bins; this is the only thing that changes the trailing
-arguments:
+The signal file is the first positional argument. Pick **one** of
+three types of trailing argument depending on how you want to define the bins
 
 | Sub-mode | Bins | Command |
 |---|---|---|
@@ -55,9 +50,10 @@ arguments:
 | **1c — explicit** (`-b f`) | bins read from a file of `start<TAB>end` offsets (gaps, varying widths, negatives allowed) | `make_heatmap [opts] -b f SIGNAL FEATURES OUT BINFILE` |
 
 - `SIGNAL` = signal track, `FEATURES` = feature list, `OUT` = output matrix.
-- The `--` in 1a separates options from positional args so a **negative** `start`
-  (e.g. `-2000`) is not mistaken for an option. Use it whenever `start` is
-  negative.
+- **The `--` separates options from positional arguments.** It is needed only when
+  a positional value can begin with `-` — i.e. `-b c` with a **negative** `start`
+  (e.g. `-2000`), which otherwise gets parsed as an option. `-b v` and `-b f` never
+  need it (their first positional is a filename, and `count` is positive).
 - `-b c` and `-b f` place bins at **fixed offsets from an anchor** (good for
   "signal ±2 kb around the TSS"). `-b v` instead **divides each feature** (good for
   "signal across the whole gene body, 5′→3′"); the anchor is ignored in `-b v`.
@@ -68,9 +64,17 @@ The signal is supplied as **two files, one per strand**: `-p PLUS -m MINUS`. The
 feature file is then the first positional argument (there is no positional signal
 file). The three bin sub-forms are identical; only the leading arguments change:
 
-```
-make_heatmap [opts] -p PLUS -m MINUS -b c -- FEATURES OUT start size count
-make_heatmap [opts] -p PLUS -m MINUS -b v    FEATURES OUT count
+```bash
+# fixed size bins (end coord = binSize X numBins; e.g. 25nt bins from -150/+150 bp relative to TSS)
+# '--' is required here: StartCoord can be negative (e.g. -150), which would otherwise be read as an option
+make_heatmap [opts] -p PLUS -m MINUS -b c -- FEATURES OUT StartCoord BinSize NumberOfBins
+
+# Divide features into a fixed number of bins regardless of size (e.g. 100 bins per gene)
+# no '--': NumberOfBins is positive and FEATURES is a filename
+make_heatmap [opts] -p PLUS -m MINUS -b v    FEATURES OUT NumberOfBins
+
+# count across bins specified in file
+# no '--': the trailing argument is a filename
 make_heatmap [opts] -p PLUS -m MINUS -b f    FEATURES OUT BINFILE
 ```
 
@@ -216,12 +220,7 @@ files. Two behaviors:
 
 ## Examples
 
-PRO-seq coverage (separate `+`/`−` bedGraphs), 2 kb around the TSS in 40 × 100 nt
-bins, same-strand, summed:
-```
-make_heatmap -p fwd.bedGraph -m rev.bedGraph -b c -s s -a s -l s -d g -- \
-    genes.txt out.matrix -2000 100 40
-```
+### Single signal file (Mode 1)
 
 ChIP-seq coverage (one bedGraph) over whole gene bodies scaled to 50 bins:
 ```
@@ -234,8 +233,31 @@ make_heatmap -h b -b f --nostrand reads.bed peaks.txt out.matrix bins.txt
 ```
 
 Mean per-nucleotide coverage (`-v c`) in 25 nt bins around the TSS:
-```
+```bash
+# '--' required: the -500 StartCoord is negative
 make_heatmap -h G -b c -v c -a s -d g -- sample.bedGraph genes.txt out.matrix -500 25 40
+```
+
+### Strand-split signal (Mode 2, `-p` / `-m`)
+
+One example per bin sub-form — PRO-seq coverage in separate `+`/`−` bedGraphs,
+same-strand matching, 5′ end of each signal interval (`-l s`):
+
+`-b c` — fixed 100 nt bins, 2 kb each side of the TSS:
+```bash
+# '--' required: the -2000 StartCoord is negative
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b c -s s -a s -l s -d g -- \
+    genes.txt out.matrix -2000 100 40
+```
+
+`-b v` — each gene body scaled to 100 bins (anchor ignored; 5′→3′ via `-d g`):
+```
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b v -s s -l s -d g genes.txt out.matrix 100
+```
+
+`-b f` — custom bins from a file (offsets relative to the anchor):
+```
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b f -s s -a s -l s -d g genes.txt out.matrix bins.txt
 ```
 
 ---
