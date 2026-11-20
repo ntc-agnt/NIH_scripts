@@ -6,11 +6,29 @@ A faster, **byte-identical** drop-in for `make_heatmap` (same directory). It is 
 formats, and (at `-t 1`) produces byte-for-byte identical output** across every
 supported mode.
 
+```bash
+# Linux and macOS, one source (uses std::unordered_map; needs C++11):
+g++ -O3 -std=c++11 -pthread -o make_heatmap_optimized make_heatmap_optimized.cpp
+
+# single-threaded build (no pthreads):
+g++ -O3 -std=c++11 -DSINGLE -o make_heatmap_optimized make_heatmap_optimized.cpp
 ```
-g++ -O3 -o make_heatmap_optimized make_heatmap_optimized.cpp -lpthread
-# single-threaded build, as with the original:
-g++ -O3 -DSINGLE -o make_heatmap_optimized make_heatmap_optimized.cpp
-```
+
+Build notes:
+- **`std::unordered_map`, not `<tr1/...>`.** Unlike `make_heatmap.cpp` (which uses
+  the deprecated GNU `tr1` header and needs a separate `make_heatmap_OSX.cpp` plus
+  `-stdlib=libstdc++` on macOS), this source uses the standard C++11 container, so
+  **one file compiles on both Linux and macOS/clang** — no OSX variant, no
+  `-stdlib=libstdc++`.
+- **`-std=c++11`** is only needed for compilers that still default to C++03
+  (modern g++ defaults to a later standard and builds it without the flag); it is
+  harmless to pass always.
+- **`-pthread`** (not just `-lpthread`) sets the threading flags for both the
+  compile and link steps.
+- **Do not add `-ffast-math`** — it reorders floating-point operations and would
+  break bit-for-bit reproducibility (and the byte-identity guarantee). `-O3` and
+  `-O2` are both fine. Avoid `-march=native` for a binary deployed across a
+  heterogeneous cluster.
 
 See the original `README.md` for the full option reference — nothing there
 changes.
