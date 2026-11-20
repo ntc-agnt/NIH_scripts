@@ -13,6 +13,9 @@ Entry format (newest first):
 
 <!-- entries below, newest first -->
 
+## 2026-11-20 · claude/add-extract_fragments_optimized
+- Added extract_fragments_optimized.pl (additive; original untouched): BED sort rewritten as a Guttman-Rösler transform (pack+plain-sort instead of arrayref-Schwartzian) — ~1.57x faster + ~1.57x lower peak RSS on the BED-heavy path, and it makes the BED output DETERMINISTIC by adding `end` as the final sort key (the original emitted equal-start fragments in randomized hash order). bedGraph output byte-identical; BED is the same line-set, now reproducible. + README_optimized.md, OPTIMIZATION_PLAN.md, tests/ (54/54 pass). affects results: BED line *order* only (same set of lines; now stable run-to-run) — bedGraph unchanged
+
 ## 2026-11-20 · claude/bedgraphs2stdBedGraph_optimized_v2
 - Added bedgraphs2stdBedGraph_optimized (streaming k-way merge + atomic write-temp-then-rename): byte-identical .bedGraph output to the original with far lower peak RAM on large merges, plus a guard for unsorted input. Additive (original untouched) + byte-diff harness. Re-validated: 25/25 pass (incl. 1.2M-record input). affects results: no
 
