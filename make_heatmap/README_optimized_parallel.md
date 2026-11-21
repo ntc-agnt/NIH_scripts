@@ -17,6 +17,12 @@ g++ -O3 -std=c++11 -pthread -o make_heatmap_optimized_parallel make_heatmap_opti
 g++ -O3 -std=c++11 -pthread -static-libstdc++ -static-libgcc \
     -o make_heatmap_optimized_parallel make_heatmap_optimized_parallel.cpp
 
+# the binary CHECKED IN here is built fully static + stripped, matching
+# make_heatmap_optimized (safe for this tool -- it does no NSS/user/host lookups):
+g++ -O3 -std=c++11 -static -pthread \
+    -o make_heatmap_optimized_parallel make_heatmap_optimized_parallel.cpp && \
+    strip make_heatmap_optimized_parallel
+
 # single-threaded build (no pthreads; behaves exactly like make_heatmap_optimized):
 g++ -O3 -std=c++11 -DSINGLE -o make_heatmap_optimized_parallel make_heatmap_optimized_parallel.cpp
 ```
