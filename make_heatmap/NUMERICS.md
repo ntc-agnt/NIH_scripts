@@ -16,7 +16,7 @@ to a different row.
 
 **Row order is fixed and safe.** make_heatmap emits rows **sorted lexicographically
 by the feature-ID column** (an internal ordered map), regardless of input order.
-This is identical in all three builds (original, `_optimized`, `_optimized_summation`).
+This is identical in both builds (original and `_optimized`).
 Note two consequences, true of every build:
 - make_heatmap does **not** preserve *input* order — "input row N ↔ output row N"
   holds only if the feature list is already ID-sorted. A consumer that joins by the
@@ -84,27 +84,28 @@ threads happen to acquire it:
 So yes: on the same float data, `-t 1`, `-t 2`, `-t 6` can give trivially different
 numbers. If you need bit-for-bit reproducibility from those builds, use `-t 1`.
 
-## The three builds and their guarantees
+## The builds and their guarantees
 
 | Build | Speed | Summation | Reproducibility |
 |---|---|---|---|
 | `make_heatmap` (original) | baseline | input-file order at `-t 1` | bit-identical only at `-t 1`; `-t N` varies in last bits (float) |
 | `make_heatmap_optimized` | ~2–13× (scales with gene count) | **byte-identical to the original at `-t 1`** | same as original (`-t 1` deterministic; `-t N` varies) |
-| `make_heatmap_optimized_summation` | same Phase 1–3 win + a **modest** multicore speedup (≈1.5× on 4 cores; capped by serial input reading) | **compensated (Neumaier) summation** | **thread-count-independent and run-to-run reproducible** (`-t1`=`-t2`=`-t8` byte-identical) to ~1 ULP of the true sum; *functionally* identical to the originals (relative ≈1e-13 internally; ≤1 unit in the 6-sig-fig printout), **not** byte-identical |
 
-- Use **`_optimized`** when you want the speedup *and* bit-for-bit agreement with
-  historical `make_heatmap` output (at `-t 1`). This is the safe default.
-- Use **`_optimized_summation`** when you want multi-core throughput and consistent
-  numbers across thread counts. Its compensated summation is also *more accurate*
-  than naive summation, so it is the more robust choice for the signed/cancellation
-  case above — but confirm it against your tolerance first, since its values are not
-  bit-identical to the originals by design.
-- For any **signed/differential** input track, prefer `_optimized_summation` (better
-  conditioned) or pin the originals to `-t 1`, and validate numerically.
+- Use **`_optimized`** — it is the faster, byte-identical drop-in and the safe default:
+  for standard non-negative coverage/count data it reproduces historical
+  `make_heatmap` output exactly, and it's 2–13× faster.
+- For any **signed/differential** input track (the one case summation order can matter,
+  above), pin to `-t 1` for bit-reproducibility and validate numerically.
+
+> A compensated-summation parallel variant (`_optimized_summation`) was prototyped and
+> then dropped: it was ~20% *slower* single-threaded and only ~1.3–1.5× on ≤6 cores
+> (make_heatmap is not accumulation-bound), and it altered the output bits. The
+> remaining speedup lever is a **byte-identical** parallelization of the match + output
+> stages; see the benchmark/plan work.
 
 ## Verifying on your data
 
-`tests/run_harness.sh` builds each variant from source and compares them — byte-diff
-for `_optimized` vs original, and a **relative-tolerance** comparison plus a
-thread-count-independence check for `_optimized_summation`. Re-run it on O2 with
-your toolchain before trusting a swapped `/n/data1` binary.
+`tests/run_harness.sh` builds `_optimized` and the reference from source and byte-diffs
+them across the full option matrix; `tests/benchmark.sh` reports absolute wall times
+across depth / gene-count / binning / value-type. Re-run both on O2 with your toolchain
+before trusting a swapped `/n/data1` binary.
