@@ -1,140 +1,315 @@
-# Make Heatmap Readme
-Given a set of aligned read counts, microarray probe intensities, or other relevant value ascribed to a genomic location (hit file), a list of genes or other features of interest (gene list file), and a set of relative bin start and end locations (bin file or definition), produces a matrix of total or average values of hit file elements intersecting with each bin, for each gene list element.
+# make_heatmap
 
-## Four distinct command line forms may be used:
-```
-make_heatmap [options] [hit file] [gene list file] [output file] [bin file]
-```
-This form is for use with hit file types that include strand information or for running the program without utilizing\
-any strand information.
+`make_heatmap` summarizes a genome-wide **signal** (e.g. PRO-seq / ChIP-seq
+coverage, or a set of mapped intervals) over a list of **features** (genes, TSSs,
+peaks, …), producing a **feature × bin matrix**: one row per feature, one column
+per positional bin, each cell holding the aggregated signal in that bin for that
+feature. That matrix is what metagene profiles and heatmaps are built from.
 
-```
-make_heatmap [options] -b c ... [output file] [bin start] [bin size] [bin count]
-```
-This form is used to automatically generate relative bin start and end locations rather than define them explicitly.
-
-```
-make_heatmap [options] -b v ... [output file] [bin count]
-```
-This form is used to automatically generate a fixed number of variably sized bins per gene list element.
-
-```
-make_heatmap [options] -p [plus strand hit file] -m [minus strand hit file] [gene list file] ...
-```
-This form is for use with hit file types that do not include strand information, especially in cases where such information is required by the selected options.
-
-
-## Options:
-
-Description of the options available for make_heatmap
-```
-  --help                     produce this help message
-  -p [ --plus ] arg          specify file containing plus strand hits
-  -m [ --minus ] arg         specify file containing minus strand hits
-  -t [ --threads ] arg (=1)  specify number of threads to use
-  -b [ --bintype ] arg (=c)  specify method of defining relative bin locations:
-                               c  command line, fixed bin size
-                               v  command line, variable bin size
-                               f  file
-  -h [ --hittype ] arg (=G)  specify hit file type:
-                               G  standard bedGraph (0-based start coordinate)
-                               g  bedgraph (1-based start coordinate)
-                               b  basic bed
-                               e  extended bed
-                               c  cppmatch
-  -l [ --hitloc ] arg (=p)   specify location within hit to match to gene
-                             list:
-                               p  physical start
-                               d  physical end
-                               s  genetic start, requires -p, -m, -h c, or -h e
-                               e  genetic end, requires -p, -m, -h c, or -h e
-                               c  center
-  -a [ --anchor ] arg (=s)   specify location within each gene to anchor
-                             relative bin locations:
-                               s  genetic start, requires stranded gene list
-                               e  genetic end, requires stranded gene list
-                               p  physical start
-                               d  physical end
-                               u  user-specified, contained in second column
-                                  of gene list file
-  -v [ --binvalue ] arg (=t) specify method of determining value for each bin
-                               t  compute total of hit values
-                               a  compute average of hit values
-                               d  compute density of hit values
-                               c  compute mean per-nt coverage
-  -d [ --binloc ] arg (=g)   specify method of determining location of each bin
-                               g  interpret relative bin locations as genetic
-                                  distance, requires stranded gene list
-                               p  interpret relative bin locations as physical
-                                  distance
-  -s [ --strands ] arg (=b)  specify handling of strand identifiers:
-                               b  utilize hits from both strands, also for use
-                                  with data that lacks strand information
-                               s  utilize only same-strand hits, requires
-                                  -p, -m, -h c, or -h e
-                               o  utilize only opposite-strand hits, requires
-                                  -p, -m, -h c, or -h e
-  --nostrand                  indicates no strand specific methods are to be
-                              used, applies -s b, -l p, -a p, and -d p
-  --nohead                    suppresses printing of header to output file
+```bash
+            bin -2   bin -1   bin 0(anchor)  bin +1   bin +2
+ gene A       3.0      5.5        12.1         4.0      1.0
+ gene B       0.0      1.2         8.7         6.3      2.1
+ gene C       ...
 ```
 
-## File Types:
-**Bin Definition File:**  A bin definition file consists of two tab-separated columns, the first containing the bin start, and the second containing the bin end:
-```-100	-1
-0	99
-100	299
-400	500
-501	900
-```
-This file may contain negative values, gaps between the end of a bin and the start of the next, and variable bin sizes, but may not contain any overlapping bins.  Additionally, all bin end values must be greater than or equal to their corresponding bin start.
+Columns are placed **relative to an anchor point** in each feature (e.g. the TSS),
+so every feature is measured on the same ruler and the rows can be averaged
+(metagene) or stacked (heatmap).
 
-**Hit File(s):**  Five hit file types are supported: standard bedGraph (G), bedgraph with 1-based start coordinate (g), basic bed (b), extended bed (e), and cppmatch format (c).  Bedgraph format is described in detail [here](https://genome.ucsc.edu/goldenPath/help/bedgraph.html), and bed format [here](https://genome.ucsc.edu/FAQ/FAQformat.html#format1).  For the purposes of this program, basic bed consists of the first three, required, fields (chrom, chromStart, chromEnd).  Extended bed must include at least the first five fields (chrom, chromStart, chromEnd, name, score), and may optionally contain additional fields.  Of the additional fields, only strand will be included in the analysis, the rest will be ignored.  The dataValue field for bedgraph format  will be used to calculate bin values.  For bed formats, each entry will be assigned a value of 1 for this purpose.  **_Both bed and bedGraph format utilize 0-based coordinates for the chromStart field, and 1-based coordinates for chromEnd, which are interpreted as such by make_heatmap in the cases of bed and standard bedGraph input.  In order to maintain compatibility with previously written tools (e.g. bowtie2bedgraph, extract_fragments), bedgraph input utilizing 1-based start coordinates is also accepted._**  Cppmatch format consists of five required, and one optional, tab separated columns:
-```
-[ID]        [Value]        [Chromosome]        [Physical Start]        [Physical End]        [Strand]
-```
-The ID column may contain any relevant information, and is not strictly required to be unique unless the same IDs will also be used as Gene IDs which must be unique (see below).  The value column must contain a number, to be used in the calculation of bin values, and the strand column may contain only the values “plus”, “minus”, “+”, or “-“.  The physical start and end, corresponding to the boundaries of the aligned read, probe, or other feature, must be integer values, with physical end being greater than or equal to physical start.  The chromosome identifiers used in all hit file types must match those contained in the gene list file exactly.
+---
 
-**Gene List File:**  The gene list file consists of five required, and one optional, tab-separated columns, with each line corresponding to one gene or other feature of interest:
-```
-[Gene ID]  [Description/User-defined Anchor]  [Chromosome]  [Physical Start]  [Physical End]  [Strand]
+## Terminology
+
+This tool predates some now-standard names. The equivalents:
+
+| This document | In the original help text | What it is |
+|---|---|---|
+| **signal track** / signal file | "hit file" | the data being summarized — a bedGraph of coverage, or a BED/cppmatch set of intervals |
+| **feature list** | "gene list file" | the regions that become matrix **rows** (genes, TSSs, peaks …) |
+| **anchor** | anchor | the reference point *inside each feature* that column offsets are measured from |
+| **bin** / column | bin | one output column: a window at a fixed offset from the anchor |
+| **value** | bin value | the number put in a cell (sum / average / density / coverage of the signal in that bin) |
+
+---
+
+## Run modes
+
+How you invoke `make_heatmap` depends first on **how the signal is supplied**.
+There are two modes; the first has three sub-forms (by how the bins are defined).
+
+### Mode 1 — a single signal file
+
+The signal file is the first positional argument. Pick **one** of
+three types of trailing argument depending on how you want to define the bins
+
+| Sub-mode | Bins | Command |
+|---|---|---|
+| **1a — uniform** (`-b c`, default) | `count` equal bins of width `size`, the first starting `start` from the anchor | `make_heatmap [opts] -b c -- SIGNAL FEATURES OUT start size count` |
+| **1b — scaled** (`-b v`) | each feature's own span split into `count` bins (features normalized to the same number of columns) | `make_heatmap [opts] -b v SIGNAL FEATURES OUT count` |
+| **1c — explicit** (`-b f`) | bins read from a file of `start<TAB>end` offsets (gaps, varying widths, negatives allowed) | `make_heatmap [opts] -b f SIGNAL FEATURES OUT BINFILE` |
+
+- `SIGNAL` = signal track, `FEATURES` = feature list, `OUT` = output matrix.
+- **The `--` separates options from positional arguments.** It is needed only when
+  a positional value can begin with `-` — i.e. `-b c` with a **negative** `start`
+  (e.g. `-2000`), which otherwise gets parsed as an option. `-b v` and `-b f` never
+  need it (their first positional is a filename, and `count` is positive).
+- `-b c` and `-b f` place bins at **fixed offsets from an anchor** (good for
+  "signal ±2 kb around the TSS"). `-b v` instead **divides each feature** (good for
+  "signal across the whole gene body, 5′→3′"); the anchor is ignored in `-b v`.
+
+### Mode 2 — strand-split signal (`-p` / `-m`)
+
+The signal is supplied as **two files, one per strand**: `-p PLUS -m MINUS`. The
+feature file is then the first positional argument (there is no positional signal
+file). The three bin sub-forms are identical; only the leading arguments change:
+
+```bash
+# fixed size bins (end coord = binSize X numBins; e.g. 25nt bins from -150/+150 bp relative to TSS)
+# '--' is required here: StartCoord can be negative (e.g. -150), which would otherwise be read as an option
+make_heatmap [opts] -p PLUS -m MINUS -b c -- FEATURES OUT StartCoord BinSize NumberOfBins
+
+# Divide features into a fixed number of bins regardless of size (e.g. 100 bins per gene)
+# no '--': NumberOfBins is positive and FEATURES is a filename
+make_heatmap [opts] -p PLUS -m MINUS -b v    FEATURES OUT NumberOfBins
+
+# count across bins specified in file
+# no '--': the trailing argument is a filename
+make_heatmap [opts] -p PLUS -m MINUS -b f    FEATURES OUT BINFILE
 ```
 
-The gene ID field must contain a unique value for each line, however, physical overlap of features is allowed.  If the option for user-specified anchor positions is specified (-a u), the second field must contain an integer value that falls between those in the physical start and physical end columns, otherwise, this field may contain any relevant information to be passed to the output file.  There are no restrictions placed on the value contained in the chromosome field, however, the values must match those in the hit file(s) exactly.  The physical start and physical end fields may consist of integer values only, corresponding to the boundaries of the gene or other feature, with physical start less than or equal to physical end.  The optional strand column may consist of only the values: “plus”, “minus”, “+”, or “-“.
+**When you need Mode 2.** bedGraph and basic-BED signal carry no strand column, so
+from a single such file the tool can only do non-strand-specific, physical-position
+matching. To do **strand-specific matching** (`-s s`/`-s o`) or to measure a signal
+interval by its **genetic** (5′/3′) end (`-l s`/`-l e`) with strandless data, split
+the signal into a plus-strand file and a minus-strand file and pass them with
+`-p`/`-m` — the flag assigns the strand. (Extended BED and cppmatch already carry a
+strand column, so they can do strand-specific work from a single Mode-1 file.)
+`-p`/`-m` is the usual form for PRO-seq/GRO-seq, whose coverage is already in
+separate `+`/`−` bedGraphs.
 
-**Output File:**  The output file consists of two parts, the header, which identifies the options and input files utilized in the file’s creation, and the matrix itself.  Each row of the matrix consists of the six tab separated columns contained in the input gene list file, and one column corresponding to each bin, each containing the total or average value of hit file elements mapped to the bin.
+---
 
+## Choosing what gets measured
 
-## Detailed Option Descriptions:
+These options apply in both modes. Defaults in **bold**.
 
-**Bin Definition Method (-b):**  Relative bin locations may be defined either in a file (f, described above), or on the command line (c, v).  Command line definition may consist of either specifying the first bin start location, bin size, and bin count (c), or the bin count alone (v).  The first will result in uniformly sized bins with locations relative to the selected anchor point.  The second will result in variable sized bins spanning the length of each gene list element.  When the length of a gene list element is not evenly divisible by the number of bins, a number of the most downstream bins sufficient to cover the remainder are extended by one nucleotide.  If the number of bins is greater than the length of the gene list element, “fractionally” sized bins are created by assigning more than one bin to each position.  In this case, an extra bin is included for the most upstream locations, sufficient to cover any remainder when the bin count is not evenly divisible by the interval length.  A negative start location may be used with command-line definition, however, two consecutive dashes (--) must be inserted between the options and the first non-option command line argument for the value to be correctly interpreted:
-```
-make_heatmap -b c -- hit_file.match gene_list.txt out.matrix -100 1 201
-```
-or
-```
-make_heatmap -b c -p hit_file_forward.bedgraph -m hit_file_reverse.bedgraph -- gene_list.txt out.matrix -100 1 201
-```
-**Hit Match Location (-l):**  Unless mean per-nt coverage per bin is requested (see bin value section below), each entry in the hit file must be resolved to a single location so that it may be mapped to a single bin.  This point may be the genetic start (s), genetic end (e), physical start (p), physical end (d), or center (c).  All supported hit file types define each hit location by a physical start and physical end.  When strand information is available, these may be interpreted as genetic start and end locations, where for the plus strand, genetic start and end are equivalent to physical start and end, and for the minus strand, genetic start is equivalent to physical end, and genetic end is equivalent to physical start.  If strand information is not included in the input hit file, and the -p/-m options are not utilized, physical start, physical end, or center match locations must be used.
+### Anchor — where columns are measured from (`-a`)
+The point in each feature that bin offset `0` refers to:
+`s` genetic start (**default**, the feature's 5′ end), `e` genetic end (3′ end),
+`p` physical start (leftmost), `d` physical end (rightmost), `u` user-defined
+(an integer in **column 2** of the feature file). Genetic anchors (`s`/`e`) need a
+strand column on the features.
 
-**Gene Anchor Location (-a):**  For each gene list element, the anchor is the location to which relative bin start and end values are added to produce the absolute bin start and end positions, that are subsequently queried.  The anchor may be the genetic start (s), genetic end (e), physical start (p), physical end (d), or it may be specified directly by the user (u).  The gene list file defines each element location by a physical start and end, which, as with the hit match location, may be interpreted as genetic start and end when strand information is available.  For plus strand elements the genetic start and end are equivalent to the physical start and end, while for minus strand elements, the genetic start is equivalent to the physical end, and the genetic end is equivalent to the physical start.  User-specified anchor points must be a desired physical location within the boundaries of each gene list element.  These may be specified in the second column of the gene list file.  If strand information is not included in the input gene list file, physical start, physical end, or user-specified anchor locations must be used.
+### Measured point — how a signal interval is reduced to one position (`-l`)
+Each signal interval is collapsed to a single point before being binned (except in
+coverage mode, below): `p` physical start (**default**), `d` physical end,
+`s` genetic start (5′), `e` genetic end (3′), `c` center. Genetic points (`s`/`e`)
+need strand on the signal — i.e. Mode 2, or a stranded signal format.
 
-**Method of Determining Bin Value (-v):**  By default, the value reported for each bin is the sum of the values associated with all hit locations intersecting the bin (t).  Alternatively, the average value (a) may be reported, which is the total divided by the number of intersecting hit locations, the density (d), which is the total divided by the bin size, or mean per-nt coverage(c).  In this final case, the value of each line in the hit file is assumed to cover the full interval from the start coordinate to the end.  This value is added to a bin’s total for each intersecting nucleotide.  The reported value for each bin is this total divided by its length.
+### Bin direction — genetic vs physical (`-d`)
+`g` genetic (**default**): offsets run 5′→3′, so `+100` means 100 nt **downstream
+in the direction of transcription** for both strands (for `−` features the tool
+subtracts from the anchor). `p` physical: offsets always run left→right along the
+chromosome. Use `g` to align `+`/`−` features consistently; `g` needs feature
+strand.
 
-**Method of Determining Bin Location (-d):**  Bin locations may be determined using either genetic (g) or physical (p) distance.  When genetic distance is utilized, absolute bin start and end locations are determined for plus strand gene list elements by adding the relative bin locations to the anchor point, and for minus strand elements by subtracting relative bin locations from the anchor point.  When physical distance is utilized, relative positions are added to the anchor point for both plus strand and minus strand elements.  If strand information is not included in the input gene list file, physical distance must be used.
+### Value — what goes in each cell (`-v`)
+`t` total (**default**): sum of signal values in the bin (for BED input every
+interval counts as 1, so this is a **count**). `a` average: total ÷ number of
+intervals in the bin. `d` density: total ÷ bin width. `c` coverage: treats each
+signal interval as spanning its full length and adds `value × (overlapping nt)` to
+every bin it crosses, then divides by bin width — i.e. mean per-nt coverage; `-l`
+is ignored in this mode.
 
-**Strand Handling Method (-s):**  When mapping hit file entries to bins, three methods may be used:  same-strand matching (s), opposite-strand matching (o), or non-specific matching (b).  For same-strand matching, plus strand hit file entries are mapped only to plus strand bins, and minus strand entries to minus strand bins.  For opposite-strand matching, plus strand hit file entries are mapped only to minus strand bins, and minus strand entries to plus strand bins.  For non-specific matching, all hit file entries are mapped to both plus and minus strand bins.  If either the input hit file or gene list file lack strand information, non-specific matching must be used.
+---
 
-## Compiling make_heatmap
-This program was originally developed for Red Hat Enterprise Linux Server release 5.11 (Tikanga) using gcc 4.1.2 20080704 and libstdc++ (libc6).  To compile on a similar environment, use:
+## Input formats
+
+### Signal track (`-h` selects the format)
+All use UCSC coordinates: **0-based start, 1-based (exclusive) end**, except where
+noted.
+
+| `-h` | Format | Columns | Value used | Strand |
+|---|---|---|---|---|
+| `G` | standard bedGraph (**default**) | `chr  start  end  value` | the `value` column | none |
+| `g` | bedGraph, **1-based** start | `chr  start  end  value` | the `value` column | none |
+| `b` | basic BED | `chr  start  end` | 1 per interval | none |
+| `e` | extended BED | `chr  start  end  name  score  [strand]` | 1 per interval (`score` ignored) | from col 6 |
+| `c` | cppmatch | `id  value  chr  start  end  [strand]` | the `value` column | from col 6 |
+
+- `G` vs `g` differ only in the start coordinate convention (the historical
+  `bowtie2bedgraph`/`extract_fragments` tools emit 1-based starts → use `g`).
+- BED formats contribute a count (value = 1), so `-v t` over BED counts intervals.
+- cppmatch strand and extended-BED strand accept `+`, `-`, `plus`, or `minus`.
+- A signal file may be a **comma-separated list** (see *Multiple signal files*).
+
+#### Interval width: single-nt vs fixed-step vs variable-width bedGraphs
+`make_heatmap` makes **no assumption about bedGraph step/width** — it reads each
+line's own `start`/`end`/`value`, so single-nucleotide, fixed-step (uniformly
+binned), and variable-width bedGraphs are all accepted. **How width is used depends
+only on `-v`:**
+
+- **Point modes (`-v t` / `-v a` / `-v d`, the default family):** each interval is
+  first collapsed to **one coordinate** (per `-l`), and its whole `value` is
+  deposited there — the interval's **width is ignored** (except insofar as `-l`
+  chooses start/end/center). Consequences:
+  - *single-nt* bedGraphs (e.g. PRO-seq 3′/5′ end counts): the value lands at that
+    exact nt — full resolution.
+  - *fixed-step* bedGraphs (e.g. 10-nt bins): the entire bin's value is placed at
+    one coordinate of the bin (its start under the default `-l p`), **not** spread
+    over the 10 nt — so positional resolution is the step size; `-l c` centers it.
+  - *variable-width* bedGraphs (e.g. merged coverage / fragment pileups): wide and
+    narrow lines are treated identically — each contributes its `value` at a single
+    point, regardless of how many nucleotides it spans.
+  - So if a bedGraph's `value` is a **per-nt level** held constant across a
+    multi-nt interval, point modes will **undercount** it (they add the level once,
+    not once per nt); point modes are appropriate when each line's `value` is a
+    **per-interval total** (as for 1-nt end counts or fragment-center bins).
+- **Coverage mode (`-v c`):** width **is** honored — each interval adds
+  `value × (nt overlapping the bin)` to every bin it crosses. Single-nt,
+  fixed-step, and variable-width bedGraphs are therefore integrated consistently;
+  use this when `value` is a per-nt level and you need width-aware profiles.
+
+### Feature list
+Tab-separated, one feature per row — these six columns become the first six output
+columns:
+
+```bash
+ID    Description/anchor    Chromosome    PhysStart    PhysEnd    [Strand]
 ```
-g++ -O3 -o make_heatmap make_heatmap.cpp -lpthread
+
+- **ID** must be unique (duplicates are skipped with a warning).
+- **Column 2** is free text *unless* `-a u`, in which case it must be an integer
+  anchor position inside `[PhysStart, PhysEnd]`.
+- **Strand** (`+`/`-`/`plus`/`minus`) is required for any genetic option
+  (`-a s|e`, `-l s|e`, `-d g`, `-s s|o`); omit it only with physical/`--nostrand`
+  operation.
+- `PhysStart ≤ PhysEnd`; features may overlap.
+
+### Bin file (`-b f`)
+Two tab-separated columns, `start<TAB>end`, one bin per row, as **offsets from the
+anchor**:
+
+```bash
+-100   -1
+0      99
+100    299
+400    500
 ```
-To compile on Mac OS X use:
+
+Gaps, differing widths, and negative coordinates are allowed; bins may **not**
+overlap, and each `end ≥ start`. **Do not leave a trailing newline** — the parser
+treats a blank final line as a formatting error. (This is a quirk of the original;
+the bundled `*_chr_size.txt` files follow it.)
+
+---
+
+## Output
+
+A header block (suppressed by `--nohead`) echoing the chosen options and input
+filenames, then a column header row, then one row per feature:
+
+```bash
+Gene ID   Description   Chromosome   Gene Start   Gene End   Strand   <bin 1> <bin 2> ...
 ```
-g++ -O3  -o make_heatmap make_heatmap_OSX.cpp -stdlib=libstdc++
+
+- For `-b c`/`-b f`, each bin column is labeled by its offset range `start:end`;
+  for `-b v`, by its index `0 … count-1`.
+- With genetic bin direction (`-d g`), the bins of `−`-strand features are written
+  in reversed order so every row reads 5′→3′ left-to-right.
+
+---
+
+## Multiple signal files (advanced)
+
+The signal argument (or each of `-p`/`-m`) may be a **comma-separated list** of
+files. Two behaviors:
+
+- **One output file** (default): the matrix gains one block of bin columns **per
+  input file**, side by side — a quick way to tabulate several tracks against the
+  same features.
+- **N output files** (comma-separated `OUT` list, count matching the inputs): each
+  input file is written to its own matrix.
+
+---
+
+## Examples
+
+### Single signal file (Mode 1)
+
+ChIP-seq coverage (one bedGraph) over whole gene bodies scaled to 50 bins:
+```bash
+make_heatmap -h G -b v -s b -a s -d g sample.bedGraph genes.txt out.matrix 50
 ```
-On systems with no support for pthreads, a single-threaded version may be built using:
+
+Count mapped BED intervals in custom bins around peak centers, strand-agnostic:
+```bash
+make_heatmap -h b -b f --nostrand reads.bed peaks.txt out.matrix bins.txt
 ```
-g++ -O3  -o make_heatmap make_heatmap.cpp -DSINGLE
+
+Mean per-nucleotide coverage (`-v c`) in 25 nt bins around the TSS:
+```bash
+# '--' required: the -500 StartCoord is negative
+make_heatmap -h G -b c -v c -a s -d g -- sample.bedGraph genes.txt out.matrix -500 25 40
 ```
+
+### Strand-split signal (Mode 2, `-p` / `-m`)
+
+One example per bin sub-form — PRO-seq coverage in separate `+`/`−` bedGraphs,
+same-strand matching, 5′ end of each signal interval (`-l s`):
+
+`-b c` — fixed 100 nt bins, 2 kb each side of the TSS:
+```bash
+# '--' required: the -2000 StartCoord is negative
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b c -s s -a s -l s -d g -- \
+    genes.txt out.matrix -2000 100 40
+```
+
+`-b v` — each gene body scaled to 100 bins (anchor ignored; 5′→3′ via `-d g`):
+```bash
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b v -s s -l s -d g genes.txt out.matrix 100
+```
+
+`-b f` — custom bins from a file (offsets relative to the anchor):
+```bash
+make_heatmap -p fwd.bedGraph -m rev.bedGraph -b f -s s -a s -l s -d g genes.txt out.matrix bins.txt
+```
+
+---
+
+## Defaults at a glance
+
+`-h G` (standard bedGraph) · `-b c` (uniform bins) · `-s b` (both strands) ·
+`-a s` (genetic start / TSS anchor) · `-l p` (physical start of each signal
+interval) · `-d g` (genetic bin direction) · `-v t` (total) · `-t 1`.
+
+Note the defaults assume **stranded features** (because `-a s` and `-d g` are
+genetic). For an unstranded feature list, add `--nostrand` or use `-a p -d p`.
+
+---
+
+## Build
+
+```bash
+g++ -O3 -o make_heatmap make_heatmap.cpp -lpthread          # Linux
+g++ -O3 -o make_heatmap make_heatmap_OSX.cpp -stdlib=libstdc++   # macOS
+g++ -O3 -DSINGLE -o make_heatmap make_heatmap.cpp           # no pthreads (single-threaded)
+```
+
+A faster, byte-identical drop-in (`make_heatmap_optimized.cpp`) is available in
+this directory — see `README_optimized.md`.
+
+---
+
+## Caveats
+
+- **Strandless signal + single file** limits you to `-s b` and physical hit
+  locations; use `-p`/`-m` (Mode 2) or a stranded format for anything else.
+- **Bin files must not end in a trailing newline** (see above).
+- A signal file consisting of a very large number of **consecutive malformed
+  lines** can exhaust the stack (each bad line recurses); well-formed input is
+  unaffected.
+- Under `-t N > 1`, floating-point bin totals may differ in the last digits from a
+  `-t 1` run (summation order depends on thread interleaving). Use `-t 1` when you
+  need bit-reproducible output.
