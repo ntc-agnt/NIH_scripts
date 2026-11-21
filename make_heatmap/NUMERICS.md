@@ -73,7 +73,7 @@ result) or when the dynamic range approaches `1/ε ≈ 1e16`.
 
 ## Does the result depend on thread count?
 
-**Yes, in the original and the byte-identical `_optimized` build — for float values.**
+**In the original and the `_optimized` build: yes, for float values.**
 Those builds accumulate each cell under a single global lock, in whatever order the
 threads happen to acquire it:
 - `-t 1` is **deterministic** (values are summed in input-file order).
@@ -81,8 +81,14 @@ threads happen to acquire it:
   the `-t 1` result **and run-to-run** — at the ~1e-14 level for coverage (Case A).
 - **Integer/count matrices are identical at every thread count** (exact, Case B).
 
-So yes: on the same float data, `-t 1`, `-t 2`, `-t 6` can give trivially different
-numbers. If you need bit-for-bit reproducibility from those builds, use `-t 1`.
+So on the same float data, those builds give trivially different numbers at `-t 1`,
+`-t 2`, `-t 6`. For bit-for-bit reproducibility from them, use `-t 1`.
+
+**In the `_optimized_parallel` build: no — it is byte-identical at every thread count.**
+It preserves each cell's input-file summation order even when threaded (workers emit
+file-ordered deltas that a serial pass replays in order), so `-t 1 == -t 2 == -t 6`
+bit-for-bit, for float data too. (It is also the only threaded build whose `-t N` is
+actually *faster* than its own `-t 1`; see the note below on the lock.)
 
 ## The builds and their guarantees
 
@@ -90,22 +96,38 @@ numbers. If you need bit-for-bit reproducibility from those builds, use `-t 1`.
 |---|---|---|---|
 | `make_heatmap` (original) | baseline | input-file order at `-t 1` | bit-identical only at `-t 1`; `-t N` varies in last bits (float) |
 | `make_heatmap_optimized` | ~2–13× (scales with gene count) | **byte-identical to the original at `-t 1`** | same as original (`-t 1` deterministic; `-t N` varies) |
+| `make_heatmap_optimized_parallel` | `_optimized` + thread scaling (~1.4–2× over its `-t 1` on ≤6 cores) | **byte-identical to the original at *every* `-t`** | `-t 1 == -t N` bit-for-bit, float data included |
 
-- Use **`_optimized`** — it is the faster, byte-identical drop-in and the safe default:
-  for standard non-negative coverage/count data it reproduces historical
-  `make_heatmap` output exactly, and it's 2–13× faster.
-- For any **signed/differential** input track (the one case summation order can matter,
-  above), pin to `-t 1` for bit-reproducibility and validate numerically.
+- Use **`_optimized`** — the faster, byte-identical serial drop-in and the safe default:
+  for standard non-negative coverage/count data it reproduces historical `make_heatmap`
+  output exactly, and it's 2–13× faster.
+- Use **`_optimized_parallel`** when the job reserves cores and calls `-t N > 1` (the
+  `pipeline2` / `pauseIndex` case, both hard-coded to `-t 6`): it is byte-identical at
+  every thread count — so a safe drop-in even for signed/differential tracks — and it is
+  the only threaded build whose `-t N` beats its own `-t 1`.
+- For any **signed/differential** input track with `_optimized` (not `_parallel`), pin to
+  `-t 1` for bit-reproducibility and validate numerically.
 
-> A compensated-summation parallel variant (`_optimized_summation`) was prototyped and
-> then dropped: it was ~20% *slower* single-threaded and only ~1.3–1.5× on ≤6 cores
-> (make_heatmap is not accumulation-bound), and it altered the output bits. The
-> remaining speedup lever is a **byte-identical** parallelization of the match + output
-> stages; see the benchmark/plan work.
+> **The lock, and why threading the lock-based builds backfires.** The original and
+> `_optimized` accumulate every bin under one global mutex, so only the *match* runs in
+> parallel. That paid off when the match was the original's O(genes) linear scan, but
+> `_optimized` made the match cheap (windowed lookup), so the lock now dominates: on a
+> 12M-hit × 20k-TSS run, `_optimized -t 6` (6.8 s) is *slower* than `_optimized -t 1`
+> (4.6 s). `_optimized_parallel` removes the lock (file-ordered delta replay, parallel
+> output) and brings that `-t 6` to 3.3 s — ~2× over `_optimized -t 6`, ~13× over the
+> original `-t 6` (43 s) — while staying byte-identical.
+>
+> A compensated-summation parallel variant (`_optimized_summation`) and a
+> per-thread-accumulate variant were both prototyped and dropped: they tied the
+> byte-identical build on speed (make_heatmap is memory-bandwidth-bound, not
+> accumulation-bound) while giving up byte-identity and, for the per-thread one, doubling
+> RAM. The byte-identical `_optimized_parallel` dominates them.
 
 ## Verifying on your data
 
 `tests/run_harness.sh` builds `_optimized` and the reference from source and byte-diffs
-them across the full option matrix; `tests/benchmark.sh` reports absolute wall times
-across depth / gene-count / binning / value-type. Re-run both on O2 with your toolchain
-before trusting a swapped `/n/data1` binary.
+them across the full option matrix; `tests/run_parallel.sh` does the same for
+`_optimized_parallel` at `-t 1/2/4` (asserting byte-identity at every thread count);
+`tests/benchmark.sh` reports absolute wall times across depth / gene-count / binning /
+value-type. Re-run them on O2 with your toolchain before trusting a swapped `/n/data1`
+binary.
