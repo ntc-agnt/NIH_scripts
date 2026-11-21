@@ -13,6 +13,9 @@ Entry format (newest first):
 
 <!-- entries below, newest first -->
 
+## 2026-11-21 · claude/revert-summation-variant
+- Removed make_heatmap_optimized_summation.cpp + its harness (run_summation.sh, compare_matrix.py). Benchmarking (hyperfine) showed it was ~20% SLOWER single-threaded than _optimized and only ~1.3–1.5× on ≤6 cores (make_heatmap is not accumulation-bound — the costs are match ~47% and output formatting ~40%, with read ~1%), and it altered output bits. Strictly dominated by _optimized for the lab's ≤6-core use. Added tests/benchmark.sh (hyperfine matrix: value-type, depth, gene-count, binning, threads). Docs updated to two builds. affects results: no (removes an unused functional-identity variant; _optimized unchanged)
+
 ## 2026-11-21 · claude/make_heatmap-summation-variant
 - Added make_heatmap_optimized_summation.cpp (3rd variant; relaxes byte-identity to FUNCTIONAL identity to allow a better summation strategy): lock-free per-thread accumulation + Neumaier compensated summation + batched reader. Results are thread-count-independent & run-to-run reproducible (-t1=-t2=-t8 byte-identical), more numerically robust (handles signed/cancellation), and functionally identical to the original (rel ~1e-13 internally; <=1 unit in the 6-sigfig printout; integer/count matrices exact). Multicore speedup is MODEST (~1.5x on 4 cores; capped by serial input reading — the big win is still the shared Phase 1-3 algorithmic work). Per-thread memory ~24B x features x bins x threads. + NUMERICS.md (lab doc: summation-order reproducibility, the 3 builds' guarantees) and tests/run_summation.sh + compare_matrix.py (functional-tolerance + thread-independence harness; 25/25). affects results: functionally identical, NOT byte-identical — use make_heatmap_optimized for bit-match to historical output
 
