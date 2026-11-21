@@ -13,6 +13,9 @@ Entry format (newest first):
 
 <!-- entries below, newest first -->
 
+## 2026-11-21 · claude/make_heatmap-summation-variant
+- Added make_heatmap_optimized_summation.cpp (3rd variant; relaxes byte-identity to FUNCTIONAL identity to allow a better summation strategy): lock-free per-thread accumulation + Neumaier compensated summation + batched reader. Results are thread-count-independent & run-to-run reproducible (-t1=-t2=-t8 byte-identical), more numerically robust (handles signed/cancellation), and functionally identical to the original (rel ~1e-13 internally; <=1 unit in the 6-sigfig printout; integer/count matrices exact). Multicore speedup is MODEST (~1.5x on 4 cores; capped by serial input reading — the big win is still the shared Phase 1-3 algorithmic work). Per-thread memory ~24B x features x bins x threads. + NUMERICS.md (lab doc: summation-order reproducibility, the 3 builds' guarantees) and tests/run_summation.sh + compare_matrix.py (functional-tolerance + thread-independence harness; 25/25). affects results: functionally identical, NOT byte-identical — use make_heatmap_optimized for bit-match to historical output
+
 ## 2026-11-20 · claude/make_heatmap-modernize-cpp
 - make_heatmap_optimized.cpp: replaced the deprecated GNU `<tr1/unordered_map>` (and `using tr1::`) with the standard C++11 `<unordered_map>`/`std::unordered_map` — the same thing make_heatmap_OSX.cpp already did, so one source now compiles on Linux and macOS/clang (no OSX variant, no `-stdlib=libstdc++`). Updated README_optimized.md build flags (`-std=c++11 -pthread`; don't use `-ffast-math`/`-march=native`). Validated byte-identical: golden-master harness 108/108 (unordered_map iteration order never reaches output). affects results: no
 
