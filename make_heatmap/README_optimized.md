@@ -6,11 +6,60 @@ A faster, **byte-identical** drop-in for `make_heatmap` (same directory). It is 
 formats, and (at `-t 1`) produces byte-for-byte identical output** across every
 supported mode.
 
+```bash
+# Linux and macOS, one source (uses std::unordered_map; needs C++11):
+g++ -O3 -std=c++11 -pthread -o make_heatmap_optimized make_heatmap_optimized.cpp
+
+# single-threaded build (no pthreads):
+g++ -O3 -std=c++11 -DSINGLE -o make_heatmap_optimized make_heatmap_optimized.cpp
 ```
-g++ -O3 -o make_heatmap_optimized make_heatmap_optimized.cpp -lpthread
-# single-threaded build, as with the original:
-g++ -O3 -DSINGLE -o make_heatmap_optimized make_heatmap_optimized.cpp
-```
+
+Build notes:
+- **`std::unordered_map`, not `<tr1/...>`.** Unlike `make_heatmap.cpp` (which uses
+  the deprecated GNU `tr1` header and needs a separate `make_heatmap_OSX.cpp` plus
+  `-stdlib=libstdc++` on macOS), this source uses the standard C++11 container, so
+  **one file compiles on both Linux and macOS/clang** — no OSX variant, no
+  `-stdlib=libstdc++`.
+- **`-std=c++11`** is only needed for compilers that still default to C++03
+  (modern g++ defaults to a later standard and builds it without the flag); it is
+  harmless to pass always.
+- **`-pthread`** (not just `-lpthread`) sets the threading flags for both the
+  compile and link steps.
+- **Do not add `-ffast-math`** — it reorders floating-point operations and would
+  break bit-for-bit reproducibility (and the byte-identity guarantee). `-O3` and
+  `-O2` are both fine.
+- **Avoid `-march=native` / `-mfma`.** Besides cluster portability (a binary built
+  on a newer node may fault on older ones), enabling FMA is the one thing that can
+  shift coverage-mode (`-v c`) results by a last bit, by fusing `value × length`
+  into the running total. Baseline x86-64 has no FMA instruction, so the default
+  build is contraction-stable; if you ever do tune the arch, add
+  `-ffp-contract=off` and prefer an explicit baseline (e.g. `-march=x86-64-v2`)
+  over `native`.
+
+### Recommended toolchain
+- **Any GCC from 4.8.1 up is fine** (4.8.1 is the first complete C++11; pass
+  `-std=c++11`). Newer is good, not a problem: a recent GCC — e.g. **`gcc/14` on
+  O2** — gives a stronger optimizer and faster libstdc++ at no correctness cost.
+  Tested here on GCC 13.3. The `-std` level is **semantic only** for this code
+  (C++11/14/17/20 produce byte-identical output at the same speed), so stay at
+  `-std=c++11`.
+- **The caveat is the *runtime* C++ library, not the compiler version.** A binary
+  built with `gcc/14` needs that module's `libstdc++.so` at launch. Under lmod that
+  library lives in the module, so a plain dynamic build works **only if the
+  environment that runs make_heatmap also has the same `gcc/NN` module loaded**;
+  otherwise you get `GLIBCXX_3.4.xx not found`. Because this binary is a hardcoded
+  `/n/data1/...` dependency invoked by many pipelines (which won't all load the
+  same module), build it **self-contained**:
+  ```bash
+  g++ -O3 -std=c++11 -pthread -static-libstdc++ -static-libgcc \
+      -o make_heatmap_optimized make_heatmap_optimized.cpp
+  ```
+  That removes the libstdc++/libgcc runtime dependency entirely (larger binary,
+  no module coupling). Avoid full `-static` (it can break NSS lookups).
+- Output is byte-identical *for the same flags* regardless of GCC version — IEEE
+  `double` arithmetic is deterministic and FMA is left off (above). Confirm on the
+  target toolchain by rebuilding both binaries and running `tests/run_harness.sh`
+  there.
 
 See the original `README.md` for the full option reference — nothing there
 changes.

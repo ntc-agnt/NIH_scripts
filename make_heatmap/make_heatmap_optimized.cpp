@@ -5,7 +5,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include <errno.h>
 #include <set>
 #include <algorithm>
@@ -19,7 +19,12 @@
 #endif
 
 using namespace std;
-using tr1::unordered_map;
+// (was `using tr1::unordered_map;`) std::unordered_map is the C++11 successor to
+// the old GNU tr1 extension header; `using namespace std` above brings it in. This
+// lets one source compile on Linux and macOS/clang (which ship no <tr1/> headers),
+// so a separate make_heatmap_OSX.cpp is no longer needed. Output is unaffected:
+// unordered_map iteration order never reaches the output (row order comes from the
+// std::map `table`; db/db_split are used only for lookups).
 
 struct totals_info;							//forward declaration (defined below)
 
